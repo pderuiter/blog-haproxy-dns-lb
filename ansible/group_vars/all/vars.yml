@@ -1,0 +1,22 @@
+---
+# HAProxy branch from the official repositories (see roles/haproxy_install):
+# 3.3 from ppa:vbernat/haproxy-3.3 on Ubuntu 24.04, 3.4 LTS on Debian 13.
+# haproxy_install_version: "3.3"
+
+# Secrets come from vault.yml (copy vault.yml.example):
+#   dns_lb_stats_password:        "{{ vault_dns_lb_stats_password }}"
+#   dns_lb_dnsdist_console_key:   "{{ vault_dns_lb_dnsdist_console_key }}"
+#   dns_lb_keepalived_auth_pass:  "{{ vault_dns_lb_keepalived_auth_pass }}"
+
+# Virtual IPs and backend DNS servers: see roles/dns_lb/defaults/main.yml (the
+# post's addresses). For example:
+# dns_lb_internal_vip: 10.0.0.53
+# dns_lb_auth_vip: 203.0.113.53
+# dns_lb_vips:
+#   - {address: 10.0.0.53/24}
+#   - {address: 203.0.113.53/24, interface: eth1}   # on a second NIC
+# dns_lb_internal_resolvers:
+#   - {name: resolver1, address: 192.168.1.10}
+
+# keepalived interface (default: the interface of the default route)
+# dns_lb_keepalived_interface: eth0

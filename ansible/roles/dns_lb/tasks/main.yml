@@ -1,0 +1,32 @@
+---
+# HAProxy binds TCP 53 on the virtual IPs, also on the node that does not hold
+# them ("High Availability HAProxy Setup" in the post)
+- name: Allow binding to addresses this node does not hold
+  ansible.builtin.copy:
+    dest: /etc/sysctl.d/90-nonlocal-bind.conf
+    content: "net.ipv4.ip_nonlocal_bind = 1\n"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Apply sysctl
+
+- name: Apply the sysctl before HAProxy starts
+  ansible.builtin.meta: flush_handlers
+
+- name: Install keepalived, psmisc (killall), socat and openssl
+  ansible.builtin.apt:
+    name:
+      - keepalived
+      - psmisc
+      - socat
+      - openssl
+    state: present
+
+- name: Configure HAProxy (TCP 53 and DoT)
+  ansible.builtin.import_tasks: haproxy.yml
+
+- name: Configure dnsdist (UDP) and the nftables redirect
+  ansible.builtin.import_tasks: dnsdist.yml
+
+- name: Configure keepalived
+  ansible.builtin.import_tasks: keepalived.yml

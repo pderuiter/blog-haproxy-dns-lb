@@ -1,0 +1,20 @@
+---
+galaxy_info:
+  role_name: dnsdist_install
+  namespace: pderuiter
+  author: Patrick de Ruiter
+  description: Install dnsdist from the official PowerDNS repository, plus nftables
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+    - name: Debian
+      versions:
+        - trixie
+  galaxy_tags:
+    - dns
+    - dnsdist
+
+dependencies: []

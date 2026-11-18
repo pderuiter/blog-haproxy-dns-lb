@@ -1,0 +1,22 @@
+---
+galaxy_info:
+  role_name: dns_lb
+  namespace: pderuiter
+  author: Patrick de Ruiter
+  description: Highly available DNS load balancing - HAProxy for TCP and DoT, dnsdist for UDP behind an nftables redirect, keepalived for the VIPs
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+    - name: Debian
+      versions:
+        - trixie
+  galaxy_tags:
+    - haproxy
+    - dnsdist
+    - dns
+    - keepalived
+
+dependencies: []

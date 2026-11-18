@@ -1,0 +1,13 @@
+---
+# Or generate it: cd ../terraform && terraform output -raw ansible_inventory > ../ansible/inventory.yml
+# The first host is the keepalived primary (MASTER, priority 101).
+all:
+  vars:
+    ansible_user: ansible
+  children:
+    dns_lb:
+      hosts:
+        dnslb1:
+          ansible_host: 10.0.0.2
+        dnslb2:
+          ansible_host: 10.0.0.3

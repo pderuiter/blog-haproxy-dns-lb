@@ -1,0 +1,55 @@
+---
+- name: Ensure /etc/apt/keyrings exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# Downloaded only once, like the post's curl
+- name: Check for the PowerDNS repository key
+  ansible.builtin.stat:
+    path: /etc/apt/keyrings/dnsdist-{{ dnsdist_install_branch }}-pub.asc
+  register: dnsdist_install_key
+
+- name: Download the PowerDNS repository key
+  ansible.builtin.get_url:
+    url: "{{ dnsdist_install_key_url }}"
+    dest: /etc/apt/keyrings/dnsdist-{{ dnsdist_install_branch }}-pub.asc
+    owner: root
+    group: root
+    mode: "0644"
+  when: not dnsdist_install_key.stat.exists
+
+- name: Add the dnsdist repository to /etc/apt/sources.list.d/pdns.list
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/pdns.list
+    content: >
+      deb [signed-by=/etc/apt/keyrings/dnsdist-{{ dnsdist_install_branch }}-pub.asc]
+      http://repo.powerdns.com/{{ ansible_facts['distribution'] | lower }}
+      {{ ansible_facts['distribution_release'] }}-dnsdist-{{ dnsdist_install_branch }} main
+    owner: root
+    group: root
+    mode: "0644"
+  register: dnsdist_install_repo
+
+- name: Prefer dnsdist from repo.powerdns.com over the distribution package
+  ansible.builtin.copy:
+    dest: /etc/apt/preferences.d/dnsdist
+    content: |
+      Package: dnsdist*
+      Pin: origin repo.powerdns.com
+      Pin-Priority: 600
+    owner: root
+    group: root
+    mode: "0644"
+  register: dnsdist_install_pin
+
+- name: Install dnsdist and nftables
+  ansible.builtin.apt:
+    name:
+      - dnsdist
+      - nftables
+    state: present
+    update_cache: "{{ dnsdist_install_repo is changed or dnsdist_install_pin is changed }}"

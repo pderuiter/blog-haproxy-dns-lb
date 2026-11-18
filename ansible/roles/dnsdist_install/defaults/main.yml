@@ -1,0 +1,4 @@
+---
+# dnsdist from the official PowerDNS repository, as in the post (2.1 branch)
+dnsdist_install_branch: "21"
+dnsdist_install_key_url: https://repo.powerdns.com/FD380FBB-pub.asc

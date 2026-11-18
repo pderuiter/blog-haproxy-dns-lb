@@ -1,0 +1,17 @@
+proxmox_endpoint  = "https://pve.example.com:8006/"
+proxmox_api_token = "terraform@pve!blog=00000000-0000-0000-0000-000000000000"
+proxmox_insecure  = false
+node_name         = "pve"
+vm_datastore_id   = "local-lvm"
+bridge            = "vmbr0"
+gateway           = "10.0.0.254"
+dns_servers       = ["192.0.2.53"]
+ssh_public_key    = "ssh-ed25519 AAAAC3Nza... you@example.com"
+
+# Two load balancers in one L2 segment for VRRP. The first one listed in the
+# inventory becomes the keepalived primary. The VIPs (10.0.0.53, 203.0.113.53)
+# and the DNS servers behind them are set in Ansible.
+vms = {
+  dnslb1 = { ip = "10.0.0.2/24", groups = ["dns_lb"], cores = 4, memory = 2048 }
+  dnslb2 = { ip = "10.0.0.3/24", groups = ["dns_lb"], cores = 4, memory = 2048 }
+}

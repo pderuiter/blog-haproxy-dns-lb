@@ -1,0 +1,46 @@
+---
+- name: Create /etc/haproxy/certs
+  ansible.builtin.file:
+    path: /etc/haproxy/certs
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the DoT certificate
+  ansible.builtin.copy:
+    src: "{{ dns_lb_dot_pem_src }}"
+    dest: /etc/haproxy/certs/{{ dns_lb_dot_cn }}.pem
+    owner: root
+    group: root
+    mode: "0600"
+  when: dns_lb_dot_pem_src | length > 0
+  notify: Reload haproxy
+
+- name: Create a self-signed placeholder DoT certificate
+  ansible.builtin.shell:
+    cmd: >-
+      openssl req -x509 -newkey rsa:2048 -nodes -days 365 -subj "/CN={{ dns_lb_dot_cn }}"
+      -addext "subjectAltName=DNS:{{ dns_lb_dot_cn }}"
+      -keyout /etc/haproxy/certs/{{ dns_lb_dot_cn }}.key -out /etc/haproxy/certs/{{ dns_lb_dot_cn }}.crt
+      && cat /etc/haproxy/certs/{{ dns_lb_dot_cn }}.crt /etc/haproxy/certs/{{ dns_lb_dot_cn }}.key
+      > /etc/haproxy/certs/{{ dns_lb_dot_cn }}.pem
+      && chmod 600 /etc/haproxy/certs/{{ dns_lb_dot_cn }}.pem /etc/haproxy/certs/{{ dns_lb_dot_cn }}.key
+    creates: /etc/haproxy/certs/{{ dns_lb_dot_cn }}.pem
+  when: dns_lb_dot_pem_src | length == 0
+
+- name: Deploy /etc/haproxy/haproxy.cfg
+  ansible.builtin.template:
+    src: haproxy.cfg.j2
+    dest: /etc/haproxy/haproxy.cfg
+    owner: root
+    group: root
+    mode: "0640"
+    validate: haproxy -c -f %s
+  notify: Reload haproxy
+
+- name: Enable and start HAProxy
+  ansible.builtin.systemd_service:
+    name: haproxy
+    enabled: true
+    state: started

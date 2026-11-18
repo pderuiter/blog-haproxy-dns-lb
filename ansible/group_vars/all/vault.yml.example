@@ -1,0 +1,10 @@
+---
+# Copy to vault.yml, set real values and encrypt it:
+#   ansible-vault encrypt group_vars/all/vault.yml
+#
+# Stats page password (user admin; the post uses "changeme")
+vault_dns_lb_stats_password: "change-me-stats-password"
+# dnsdist console key: head -c 32 /dev/urandom | base64
+vault_dns_lb_dnsdist_console_key: "REPLACE-with-32-random-bytes-in-base64="
+# keepalived VRRP password (auth_type PASS uses the first 8 characters)
+vault_dns_lb_keepalived_auth_pass: "chng-me8"

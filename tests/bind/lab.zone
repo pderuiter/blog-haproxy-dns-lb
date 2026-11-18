@@ -1,0 +1,7 @@
+$TTL 60
+@ IN SOA ns.lab.test. hostmaster.lab.test. 1 60 60 600 60
+@ IN NS ns.lab.test.
+ns IN A 127.0.0.1
+; who.lab.test TXT tells which server answered
+who IN TXT "SERVERNAME"
+www IN A 192.0.2.80

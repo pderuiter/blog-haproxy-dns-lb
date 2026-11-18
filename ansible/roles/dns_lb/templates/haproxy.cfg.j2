@@ -1,0 +1,106 @@
+# {{ ansible_managed }}
+# /etc/haproxy/haproxy.cfg
+
+global
+    log /dev/log local0 info
+    log /dev/log local1 notice
+    chroot /var/lib/haproxy
+    stats socket /run/haproxy/admin.sock mode 660 level admin expose-fd listeners
+    stats timeout 30s
+    user haproxy
+    group haproxy
+    daemon
+
+    # Performance
+    maxconn {{ dns_lb_maxconn }}
+    nbthread {{ dns_lb_nbthread }}
+    cpu-map {{ dns_lb_cpu_map }}
+
+    # Security
+    tune.ssl.default-dh-param 2048
+
+defaults dns_defaults
+    log global
+    timeout connect 1s
+    timeout client  5s
+    timeout server  5s
+    default-server inter 3s fall 3 rise 2
+    retries 2
+
+# Stats and monitoring
+listen stats
+    bind *:8404
+    mode http
+    stats enable
+    stats uri /stats
+    stats refresh 5s
+    stats auth {{ dns_lb_stats_user }}:{{ dns_lb_stats_password }}
+    http-request use-service prometheus-exporter if { path /metrics }
+
+# ====================
+# Internal Resolvers
+# ====================
+
+# UDP DNS for internal and external clients is handled by dnsdist (below)
+
+# TCP DNS for internal clients
+frontend internal_dns_tcp
+    bind {{ dns_lb_internal_vip }}:53
+    mode tcp
+    option tcplog
+    default_backend internal_resolvers_tcp
+
+    # Connection limiting
+    stick-table type ip size 50k expire 60s store conn_rate(10s)
+    tcp-request connection track-sc0 src
+    tcp-request connection reject if { sc0_conn_rate gt {{ dns_lb_internal_tcp_conn_rate }} }
+
+backend internal_resolvers_tcp
+    mode tcp
+    balance leastconn
+    option tcp-check
+{% for s in dns_lb_internal_resolvers %}
+    server {{ s.name }} {{ s.address }}:53 check
+{% endfor %}
+{% for s in dns_lb_fallback_resolvers %}
+    server {{ s.name }} {{ s.address }}:53 check backup
+{% endfor %}
+
+# ====================
+# Authoritative Servers
+# ====================
+
+# TCP DNS for zone transfers and large responses
+frontend authoritative_dns_tcp
+    bind {{ dns_lb_auth_vip }}:53
+    mode tcp
+    option tcplog
+    default_backend auth_servers_tcp
+
+    # Connection limiting
+    stick-table type ip size 100k expire 60s store conn_rate(10s),bytes_out_rate(10s)
+    tcp-request connection track-sc0 src
+    tcp-request connection reject if { sc0_conn_rate gt {{ dns_lb_auth_tcp_conn_rate }} }
+
+backend auth_servers_tcp
+    mode tcp
+    balance roundrobin
+    option tcp-check
+    timeout server 30s  # Longer timeout for zone transfers
+{% for s in dns_lb_auth_servers %}
+    server {{ s.name }} {{ s.address }}:53 check
+{% endfor %}
+
+# ====================
+# DNS over TLS (DoT)
+# ====================
+
+frontend dot_frontend
+    bind *:853 ssl crt /etc/haproxy/certs/dns.example.com.pem alpn dns
+    mode tcp
+    option tcplog
+    timeout client 30s
+    default_backend internal_resolvers_tcp
+
+    # TLS client validation (optional)
+    # bind *:853 ssl crt /etc/haproxy/certs/dns.example.com.pem ca-file /etc/haproxy/certs/ca.pem verify optional

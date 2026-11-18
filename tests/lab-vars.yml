@@ -1,0 +1,10 @@
+---
+# Extra vars for the lab (tests/lab.sh). Test-only secrets.
+vault_dns_lb_stats_password: lab-stats-password
+vault_dns_lb_dnsdist_console_key: "j2EJzVHZ5ynIOiJD3OvsjGyD/0z3HFaOW642XB3u0E4="
+vault_dns_lb_keepalived_auth_pass: lab-vrrp
+# the internal VIP on eth0, the authoritative VIP on the second NIC
+dns_lb_vips:
+  - {address: 10.0.0.53/24, interface: eth0}
+  - {address: 203.0.113.53/24, interface: eth1}
+dns_lb_keepalived_interface: eth0

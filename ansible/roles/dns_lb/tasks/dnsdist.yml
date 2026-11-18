@@ -1,0 +1,31 @@
+---
+- name: Deploy /etc/dnsdist/dnsdist.conf
+  ansible.builtin.template:
+    src: dnsdist.conf.j2
+    dest: /etc/dnsdist/dnsdist.conf
+    owner: root
+    group: _dnsdist
+    mode: "0640"
+    validate: dnsdist --check-config -C %s
+  notify: Restart dnsdist
+
+- name: Enable and start dnsdist
+  ansible.builtin.systemd_service:
+    name: dnsdist
+    enabled: true
+    state: started
+
+# "add below the existing tables" in /etc/nftables.conf
+- name: Add the UDP 53 redirect to /etc/nftables.conf
+  ansible.builtin.blockinfile:
+    path: /etc/nftables.conf
+    marker: "# {mark} ANSIBLE MANAGED: dns_udp redirect to dnsdist"
+    block: "{{ lookup('ansible.builtin.template', 'nftables-dns.j2') }}"
+    validate: nft -c -f %s
+  notify: Restart nftables
+
+- name: Enable and start nftables
+  ansible.builtin.systemd_service:
+    name: nftables
+    enabled: true
+    state: started

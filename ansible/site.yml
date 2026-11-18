@@ -1,0 +1,8 @@
+---
+- name: Highly available DNS load balancers (HAProxy, dnsdist, keepalived)
+  hosts: dns_lb
+  gather_facts: true
+  roles:
+    - role: haproxy_install
+    - role: dnsdist_install
+    - role: dns_lb

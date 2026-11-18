@@ -1,0 +1,35 @@
+-- {{ ansible_managed }}
+-- /etc/dnsdist/dnsdist.conf
+
+-- nftables redirects UDP {{ dns_lb_internal_vip }}:53 to {{ dns_lb_dnsdist_internal_port }} and UDP {{ dns_lb_auth_vip }}:53 to {{ dns_lb_dnsdist_auth_port }}
+addLocal('0.0.0.0:{{ dns_lb_dnsdist_internal_port }}')   -- internal resolvers
+addLocal('0.0.0.0:{{ dns_lb_dnsdist_auth_port }}')   -- authoritative servers
+setACL({ '0.0.0.0/0', '::/0' })
+
+-- Internal resolvers, public DNS as fallback
+{% for s in dns_lb_internal_resolvers %}
+newServer({ address = '{{ s.address }}:53', name = '{{ s.name }}', pool = 'internal' })
+{% endfor %}
+{% for s in dns_lb_fallback_resolvers %}
+newServer({ address = '{{ s.address }}:53', name = '{{ s.name }}', pool = 'fallback' })
+{% endfor %}
+
+-- Authoritative servers
+{% for s in dns_lb_auth_servers %}
+newServer({ address = '{{ s.address }}:53', name = '{{ s.name }}', pool = 'auth' })
+{% endfor %}
+
+setServerPolicy(roundrobin)
+
+-- Authoritative listener: strict rate limiting, authoritative servers only
+addAction(AndRule({ DSTPortRule({{ dns_lb_dnsdist_auth_port }}), MaxQPSIPRule({{ dns_lb_auth_udp_qps }}) }), DropAction())
+addAction(DSTPortRule({{ dns_lb_dnsdist_auth_port }}), PoolAction('auth'))
+
+-- Internal listener: rate limiting, resolvers with public fallback
+addAction(MaxQPSIPRule({{ dns_lb_internal_udp_qps }}), DropAction())
+addAction(PoolAvailableRule('internal'), PoolAction('internal'))
+addAction(AllRule(), PoolAction('fallback'))
+
+-- Console for dnsdist -c (generate a key with: head -c 32 /dev/urandom | base64)
+controlSocket('127.0.0.1:5199')
+setKey('{{ dns_lb_dnsdist_console_key }}')

@@ -1,0 +1,60 @@
+---
+# Values from the post's "Complete Production Configuration".
+#
+# Virtual IPs. UDP 53 on them is redirected by nftables to dnsdist, TCP 53 is
+# HAProxy. keepalived moves both between the nodes (the post's keepalived
+# example only lists the internal one; see the README).
+dns_lb_internal_vip: 10.0.0.53
+dns_lb_auth_vip: 203.0.113.53
+dns_lb_vips:
+  - {address: 10.0.0.53/24}
+  - {address: 203.0.113.53/24}
+
+# dnsdist listeners behind the nftables redirect
+dns_lb_dnsdist_internal_port: 5353
+dns_lb_dnsdist_auth_port: 5354
+
+# Internal resolvers, with public DNS as fallback (HAProxy: backup servers,
+# dnsdist: the "fallback" pool)
+dns_lb_internal_resolvers:
+  - {name: resolver1, address: 192.168.1.10}
+  - {name: resolver2, address: 192.168.1.11}
+  - {name: resolver3, address: 192.168.1.12}
+dns_lb_fallback_resolvers:
+  - {name: cloudflare, address: 1.1.1.1}
+  - {name: quad9, address: 9.9.9.9}
+dns_lb_auth_servers:
+  - {name: auth1, address: 192.168.1.20}
+  - {name: auth2, address: 192.168.1.21}
+  - {name: auth3, address: 192.168.1.22}
+
+# Rate limits: HAProxy TCP connections per source per 10 s, dnsdist UDP queries
+# per second per source
+dns_lb_internal_tcp_conn_rate: 30
+dns_lb_auth_tcp_conn_rate: 20
+dns_lb_internal_udp_qps: 100
+dns_lb_auth_udp_qps: 50
+
+# HAProxy performance settings from the post (4 CPUs)
+dns_lb_maxconn: 100000
+dns_lb_nbthread: 4
+dns_lb_cpu_map: "auto:1/1-4 0-3"
+
+# DNS over TLS on :853. Combined cert+key PEM on the controller; empty creates
+# a self-signed placeholder for dns_lb_dot_cn.
+dns_lb_dot_pem_src: ""
+dns_lb_dot_cn: dns.example.com
+
+# Stats page (the post uses admin:changeme)
+dns_lb_stats_user: admin
+dns_lb_stats_password: "{{ vault_dns_lb_stats_password }}"
+
+# dnsdist console key (base64, 32 bytes: head -c 32 /dev/urandom | base64)
+dns_lb_dnsdist_console_key: "{{ vault_dns_lb_dnsdist_console_key }}"
+
+# keepalived. The first host in the dns_lb group is the primary (MASTER,
+# priority 101), the others are backups (priority 100).
+dns_lb_keepalived_interface: "{{ ansible_facts['default_ipv4']['interface'] }}"
+dns_lb_keepalived_router_id: 53
+dns_lb_keepalived_auth_pass: "{{ vault_dns_lb_keepalived_auth_pass }}"
+dns_lb_keepalived_primary: "{{ groups['dns_lb'][0] }}"

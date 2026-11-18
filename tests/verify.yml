@@ -1,0 +1,110 @@
+---
+# Functional checks from the post ("Testing Your Configuration"). Run after
+# site.yml, from the ansible/ directory:
+#   ansible-playbook ../tests/verify.yml
+# The second play needs a "dns_clients" group: hosts with dig that are NOT the
+# load balancers (the nftables redirect only applies to traffic that arrives
+# from the network). Give each client the VIP to query in verify_client_vips,
+# for example {"client1": "10.0.0.53"}. verify_query is a name the backends
+# answer (the lab uses who.lab.test TXT, which returns the server's name).
+- name: Verify the load balancers
+  hosts: dns_lb
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Validate the HAProxy configuration (haproxy -c)
+      ansible.builtin.command: haproxy -c -f /etc/haproxy/haproxy.cfg
+      changed_when: false
+
+    - name: Validate the dnsdist configuration (dnsdist --check-config)
+      ansible.builtin.command: dnsdist --check-config
+      changed_when: false
+
+    - name: Show the nftables redirect
+      ansible.builtin.command: nft list table ip dns_udp
+      register: verify_nft
+      changed_when: false
+      failed_when: verify_nft.stdout is not search('udp dport 53 redirect to :5353')
+
+    - name: Show the dnsdist backends (dnsdist -c -e 'showServers()')
+      ansible.builtin.command: dnsdist -c -e 'showServers()'
+      register: verify_dnsdist
+      changed_when: false
+      until: verify_dnsdist.stdout is search('\sup\s')
+      retries: 10
+      delay: 3
+
+    - name: Show the HAProxy backends (show stat)
+      ansible.builtin.shell: |
+        set -o pipefail
+        echo "show stat" | socat stdio /run/haproxy/admin.sock | cut -d',' -f1,2,18 | grep -v FRONTEND
+      args:
+        executable: /bin/bash
+      register: verify_stat
+      changed_when: false
+
+    - name: Print the backend states
+      ansible.builtin.debug:
+        msg: "{{ verify_dnsdist.stdout_lines + verify_stat.stdout_lines }}"
+
+    - name: Read the addresses on this node
+      ansible.builtin.command: ip -o addr show
+      register: verify_addrs
+      changed_when: false
+
+    - name: Exactly one node holds each virtual IP
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_play_hosts | map('extract', hostvars, ['verify_addrs', 'stdout'])
+            | select('search', 'inet ' ~ (item.address | regex_escape) ~ ' ') | list | length == 1
+      loop: "{{ dns_lb_vips | default([{'address': '10.0.0.53/24'}, {'address': '203.0.113.53/24'}]) }}"
+      run_once: true
+
+- name: Verify DNS through the virtual IPs
+  hosts: dns_clients
+  gather_facts: false
+  vars:
+    verify_vip: "{{ verify_client_vips[inventory_hostname] }}"
+    verify_query: who.lab.test TXT
+  tasks:
+    - name: UDP query (dnsdist), several times to see the balancing
+      ansible.builtin.shell: |
+        set -o pipefail
+        for i in 1 2 3 4 5 6; do dig +short +time=2 +tries=1 @{{ verify_vip }} {{ verify_query }}; done | sort | uniq -c
+      args:
+        executable: /bin/bash
+      register: verify_udp
+      changed_when: false
+      failed_when: verify_udp.stdout_lines | length < 2
+
+    - name: TCP query (HAProxy)
+      ansible.builtin.shell: |
+        set -o pipefail
+        for i in 1 2 3 4 5 6; do dig +tcp +short +time=2 +tries=1 @{{ verify_vip }} {{ verify_query }}; done | sort | uniq -c
+      args:
+        executable: /bin/bash
+      register: verify_tcp
+      changed_when: false
+      failed_when: verify_tcp.stdout_lines | length < 2
+
+    - name: Print the answers per server
+      ansible.builtin.debug:
+        msg: "UDP {{ verify_udp.stdout_lines }} / TCP {{ verify_tcp.stdout_lines }}"
+
+    # As in the post: one pass through the query file
+    - name: The post's load test (dnsperf, UDP and TCP)
+      ansible.builtin.shell: |
+        set -o pipefail
+        printf '{{ verify_query }}\n' > /tmp/verify-queries.txt
+        dnsperf {{ item }} -s {{ verify_vip }} -d /tmp/verify-queries.txt -c 100 -Q 10000 \
+          | grep -E 'Queries (sent|completed|lost)'
+      args:
+        executable: /bin/bash
+      loop: ["", "-m tcp"]
+      register: verify_perf
+      changed_when: false
+
+    - name: Print the load test
+      ansible.builtin.debug:
+        msg: "{{ verify_perf.results | map(attribute='stdout_lines') | list }}"
