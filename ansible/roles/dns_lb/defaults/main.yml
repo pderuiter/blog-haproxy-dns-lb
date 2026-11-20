@@ -14,6 +14,14 @@ dns_lb_vips:
 dns_lb_dnsdist_internal_port: 5353
 dns_lb_dnsdist_auth_port: 5354
 
+# Clients the internal dnsdist listener answers; everyone else gets REFUSED.
+# setACL() is global and open for the authoritative side, so this rule is what
+# keeps the internal resolvers from being an open resolver.
+dns_lb_internal_clients:
+  - 10.0.0.0/8
+  - 172.16.0.0/12
+  - 192.168.0.0/16
+
 # Internal resolvers, with public DNS as fallback (HAProxy: backup servers,
 # dnsdist: the "fallback" pool)
 dns_lb_internal_resolvers:

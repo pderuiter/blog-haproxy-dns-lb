@@ -67,6 +67,9 @@
   vars:
     verify_vip: "{{ verify_client_vips[inventory_hostname] }}"
     verify_query: who.lab.test TXT
+    # clients that query this VIP are internal: the internal listener must answer them
+    verify_internal_vip: 10.0.0.53
+    verify_internal_port: 5353
   tasks:
     - name: UDP query (dnsdist), several times to see the balancing
       ansible.builtin.shell: |
@@ -88,9 +91,27 @@
       changed_when: false
       failed_when: verify_tcp.stdout_lines | length < 2
 
+    # setACL() is global and open for the authoritative side: the internal
+    # listener itself must refuse clients outside dns_lb_internal_clients
+    - name: Internal listener (port 5353) answers internal clients only, UDP and TCP
+      ansible.builtin.shell: |
+        set -o pipefail
+        for t in +notcp +tcp; do
+          dig $t +time=2 +tries=1 -p {{ verify_internal_port }} @{{ verify_vip }} {{ verify_query }} | grep -o 'status: [A-Z]*'
+        done
+      args:
+        executable: /bin/bash
+      register: verify_internal_listener
+      changed_when: false
+      failed_when: >-
+        verify_internal_listener.stdout_lines
+        != ['status: ' ~ ('NOERROR' if verify_vip == verify_internal_vip else 'REFUSED')] * 2
+
     - name: Print the answers per server
       ansible.builtin.debug:
-        msg: "UDP {{ verify_udp.stdout_lines }} / TCP {{ verify_tcp.stdout_lines }}"
+        msg: >-
+          UDP {{ verify_udp.stdout_lines }} / TCP {{ verify_tcp.stdout_lines }} /
+          port {{ verify_internal_port }} {{ verify_internal_listener.stdout_lines }}
 
     # As in the post: one pass through the query file
     - name: The post's load test (dnsperf, UDP and TCP)

@@ -18,6 +18,8 @@ virtual IPs on port 53.
 
 **dnsdist** (2.1 from the official PowerDNS repository):
 - **Internal listener (5353):**
+  - only clients in `dns_lb_internal_clients` (RFC1918 by default); others get REFUSED, because
+    the global ACL is open for the authoritative side;
   - the resolvers;
   - a `fallback` pool with 1.1.1.1 and 9.9.9.9 when no resolver is up;
   - 100 queries per second per source.
@@ -102,6 +104,7 @@ All variables are in `ansible/roles/dns_lb/defaults/main.yml`.
 | `dns_lb_internal_resolvers` | resolver1-3 at 192.168.1.10-12 | `name`, `address` |
 | `dns_lb_fallback_resolvers` | cloudflare 1.1.1.1, quad9 9.9.9.9 | HAProxy `backup` servers and the dnsdist `fallback` pool |
 | `dns_lb_auth_servers` | auth1-3 at 192.168.1.20-22 | authoritative servers |
+| `dns_lb_internal_clients` | `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` | sources the internal dnsdist listener answers (`NetmaskGroupRule`); others get REFUSED |
 | `dns_lb_internal_udp_qps` / `dns_lb_auth_udp_qps` | `100` / `50` | dnsdist `MaxQPSIPRule` |
 | `dns_lb_internal_tcp_conn_rate` / `dns_lb_auth_tcp_conn_rate` | `30` / `20` | HAProxy connections per source per 10 s |
 | `dns_lb_dot_pem_src` | `""` (self-signed placeholder) | DoT certificate (cert+key PEM on the controller) |
@@ -127,6 +130,7 @@ Results, from fresh containers:
   - `showServers()`;
   - exactly one holder per VIP;
   - UDP and TCP balancing over all three servers from both clients;
+  - the internal listener (port 5353) answers the internal client and refuses the public one;
   - the post's dnsperf commands over UDP and TCP.
 - `tests/lab.sh failover`:
   - stopping dnsdist or HAProxy on the primary moves the VIPs to the backup, and UDP and TCP

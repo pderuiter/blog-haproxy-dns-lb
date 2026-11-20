@@ -4,7 +4,13 @@
 -- nftables redirects UDP {{ dns_lb_internal_vip }}:53 to {{ dns_lb_dnsdist_internal_port }} and UDP {{ dns_lb_auth_vip }}:53 to {{ dns_lb_dnsdist_auth_port }}
 addLocal('0.0.0.0:{{ dns_lb_dnsdist_internal_port }}')   -- internal resolvers
 addLocal('0.0.0.0:{{ dns_lb_dnsdist_auth_port }}')   -- authoritative servers
-setACL({ '0.0.0.0/0', '::/0' })
+setACL({ '0.0.0.0/0', '::/0' })   -- global, for the authoritative side
+
+-- The only clients the internal listener answers
+internalClients = newNMG()
+{% for net in dns_lb_internal_clients %}
+internalClients:addMask('{{ net }}')
+{% endfor %}
 
 -- Internal resolvers, public DNS as fallback
 {% for s in dns_lb_internal_resolvers %}
@@ -25,7 +31,8 @@ setServerPolicy(roundrobin)
 addAction(AndRule({ DSTPortRule({{ dns_lb_dnsdist_auth_port }}), MaxQPSIPRule({{ dns_lb_auth_udp_qps }}) }), DropAction())
 addAction(DSTPortRule({{ dns_lb_dnsdist_auth_port }}), PoolAction('auth'))
 
--- Internal listener: rate limiting, resolvers with public fallback
+-- Internal listener: internal clients only, rate limiting, resolvers with public fallback
+addAction(AndRule({ DSTPortRule({{ dns_lb_dnsdist_internal_port }}), NotRule(NetmaskGroupRule(internalClients)) }), RCodeAction(DNSRCode.REFUSED))
 addAction(MaxQPSIPRule({{ dns_lb_internal_udp_qps }}), DropAction())
 addAction(PoolAvailableRule('internal'), PoolAction('internal'))
 addAction(AllRule(), PoolAction('fallback'))
